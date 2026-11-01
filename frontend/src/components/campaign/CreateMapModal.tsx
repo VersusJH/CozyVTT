@@ -196,11 +196,18 @@ export default function CreateMapModal({
   // Map metadata
   const [name, setName] = useState('');
   const [width, setWidth] = useState(20);
-  const [height, setHeight] = useState(20);
   const [gridSize, setGridSize] = useState(50);
 
   // The name last filled in from an image; a name the DM typed stays.
   const prefilledName = useRef('');
+
+  // The height keeps the image's proportions (height ÷ width) until the DM
+  // types one or applies a detected grid.
+  const [chosenHeight, setChosenHeight] = useState<number | null>(null);
+  const [imageRatio, setImageRatio] = useState<{ assetId: string; ratio: number } | null>(null);
+  const ratio = imageRatio?.assetId === mapAssetId ? imageRatio.ratio : null;
+  const height = chosenHeight
+    ?? (ratio ? Math.min(MAP_LIMITS.maxSide, Math.max(MAP_LIMITS.minSide, Math.round(width * ratio))) : 20);
   const [feetPreset, setFeetPreset] = useState<'5' | '10' | 'custom'>('5');
   const [feetCustom, setFeetCustom] = useState(5);
   const [diagonalRule, setDiagonalRule] = useState<'flat' | 'alternating'>('flat');
@@ -226,7 +233,7 @@ export default function CreateMapModal({
       setName('');
       prefilledName.current = '';
       setWidth(20);
-      setHeight(20);
+      setChosenHeight(null);
       setGridSize(50);
       setFeetPreset('5');
       setFeetCustom(5);
@@ -256,6 +263,17 @@ export default function CreateMapModal({
     return () => { cancelled = true; };
   }, [mapAssetId]);
 
+  // Read the image's proportions
+  useEffect(() => {
+    if (!mapAssetId) return;
+    const img = new Image();
+    img.onload = () => {
+      if (img.naturalWidth) setImageRatio({ assetId: mapAssetId, ratio: img.naturalHeight / img.naturalWidth });
+    };
+    img.src = api.getAssetUrl(mapAssetId, 'maps');
+    return () => { img.onload = null; };
+  }, [mapAssetId]);
+
   const handleMapAssetSelect = (asset: Asset | null) => {
     setMapAssetId(asset?.id ?? null);
     setPreviewZoom(1); // reset zoom when switching images
@@ -273,7 +291,7 @@ export default function CreateMapModal({
     if (!detectedGrid) return;
     const fitted = withinMapLimits(detectedGrid);
     setWidth(fitted.width);
-    setHeight(fitted.height);
+    setChosenHeight(fitted.height);
     setGridSize(fitted.gridSize);
     setDetectedGrid(null); // dismiss banner after applying
   };
@@ -397,7 +415,7 @@ export default function CreateMapModal({
                       <DimensionField
                         label="Height (grid squares)"
                         value={height}
-                        onChange={setHeight}
+                        onChange={setChosenHeight}
                         min={MAP_LIMITS.minSide}
                         max={MAP_LIMITS.maxSide}
                       />

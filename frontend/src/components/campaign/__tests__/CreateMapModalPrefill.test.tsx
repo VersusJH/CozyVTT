@@ -3,6 +3,10 @@
  *
  * The name started empty. Now it comes from the image's name until the DM
  * types one: "goblin-cave_v2.webp" names the map "goblin cave v2".
+ *
+ * The size started at 20 × 20 squares whatever the image, so the preview
+ * squashed a wide picture into a square. Now the height keeps the image's
+ * proportions until the DM types one or applies a detected grid.
  */
 
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
@@ -27,9 +31,20 @@ vi.mock('@/components/assets/AssetPicker', () => ({
 
 import CreateMapModal from '../CreateMapModal';
 
+// Every picture is 10 by 7, so 20 squares wide is 14 high.
+class FakeImage {
+  naturalWidth = 1000;
+  naturalHeight = 700;
+  onload: (() => void) | null = null;
+  set src(_url: string) {
+    queueMicrotask(() => this.onload?.());
+  }
+}
+
 beforeAll(() => {
   // The preview draws on a canvas, which the test page does not have.
   Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', { value: () => null, configurable: true });
+  vi.stubGlobal('Image', FakeImage);
 });
 
 beforeEach(() => {
@@ -38,6 +53,7 @@ beforeEach(() => {
 
 const open = () => render(<CreateMapModal isOpen campaignId="campaign-1" onClose={vi.fn()} onCreated={vi.fn()} />);
 const nameInput = () => screen.getByPlaceholderText('e.g. Tavern Interior, World Map...') as HTMLInputElement;
+const slider = (label: string) => screen.getByLabelText(`${label} (grid squares) slider`) as HTMLInputElement;
 
 // Picks the map image and waits until the dialog has read it.
 const pick = async (image: 'cave' | 'crypt') => {
@@ -64,5 +80,32 @@ describe('Create Map → the map name', () => {
     fireEvent.change(nameInput(), { target: { value: 'The Drowned Crown' } });
     await pick('cave');
     expect(nameInput().value).toBe('The Drowned Crown');
+  });
+});
+
+describe('Create Map → the map height', () => {
+  it('keeps the image proportions at the width', async () => {
+    open();
+    await pick('cave');
+    expect(slider('Height').value).toBe('14');
+    fireEvent.change(slider('Width'), { target: { value: '30' } });
+    expect(slider('Height').value).toBe('21');
+  });
+
+  it('stays where the DM put it', async () => {
+    open();
+    fireEvent.change(slider('Height'), { target: { value: '9' } });
+    await pick('cave');
+    expect(slider('Height').value).toBe('9');
+  });
+
+  it('is the detected grid once the DM applies it', async () => {
+    vi.mocked(detectMapGrid).mockResolvedValue({ gridSize: 70, width: 24, height: 16, confidence: 0.9 });
+    open();
+    await pick('cave');
+    fireEvent.click(screen.getByText('Apply'));
+    expect(slider('Width').value).toBe('24');
+    // The image's proportions would make it 17.
+    expect(slider('Height').value).toBe('16');
   });
 });
