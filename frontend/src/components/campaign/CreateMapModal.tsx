@@ -198,6 +198,9 @@ export default function CreateMapModal({
   const [width, setWidth] = useState(20);
   const [height, setHeight] = useState(20);
   const [gridSize, setGridSize] = useState(50);
+
+  // The name last filled in from an image; a name the DM typed stays.
+  const prefilledName = useRef('');
   const [feetPreset, setFeetPreset] = useState<'5' | '10' | 'custom'>('5');
   const [feetCustom, setFeetCustom] = useState(5);
   const [diagonalRule, setDiagonalRule] = useState<'flat' | 'alternating'>('flat');
@@ -221,6 +224,7 @@ export default function CreateMapModal({
       setMapAssetId(null);
       setSpiritAssetId(null);
       setName('');
+      prefilledName.current = '';
       setWidth(20);
       setHeight(20);
       setGridSize(50);
@@ -255,6 +259,14 @@ export default function CreateMapModal({
   const handleMapAssetSelect = (asset: Asset | null) => {
     setMapAssetId(asset?.id ?? null);
     setPreviewZoom(1); // reset zoom when switching images
+
+    // Name the map after its image ("goblin-cave_v2.webp" → "goblin cave v2"),
+    // unless the DM has named it
+    const imageName = (asset?.name ?? '').replace(/\.(png|jpe?g|webp)$/i, '').replace(/[-_\s]+/g, ' ').trim();
+    if (imageName && (name.trim() === '' || name === prefilledName.current)) {
+      setName(imageName);
+      prefilledName.current = imageName;
+    }
   };
 
   const applyDetectedGrid = () => {
